@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Biosecurity Economic Efficiency Calculator</title>
+<style>
+:root{
+  --bg:#f4f7f5; --card:#fff; --text:#1f2937; --muted:#6b7280; --line:#dbe2ea;
+  --accent:#166534; --accent2:#14532d; --good:#166534; --bad:#b91c1c; --soft:#eef6f0;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(135deg,var(--accent2),var(--accent));color:white;padding:28px 20px}
+.wrap{max-width:1600px;margin:auto}
+h1{margin:0 0 6px;font-size:28px}
+header p{margin:0;opacity:.92}
+main{padding:20px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px;box-shadow:0 3px 12px rgba(0,0,0,.04)}
+.label{font-size:13px;color:var(--muted);margin-bottom:5px}
+.value{font-size:23px;font-weight:700}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 16px}
+button,select{border:none;border-radius:9px;padding:10px 13px;font-weight:600}
+button{cursor:pointer}
+.primary{background:var(--accent);color:#fff}
+.secondary{background:#e5e7eb;color:#1f2937}
+.danger{background:#fee2e2;color:#991b1b}
+.formula{background:#f8fafc;border-left:4px solid var(--accent);padding:12px 14px;border-radius:8px;margin-bottom:14px}
+.tablewrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;min-width:2050px}
+th,td{border-bottom:1px solid var(--line);padding:8px 7px;text-align:right;vertical-align:middle}
+th{position:sticky;top:0;background:#edf5ef;font-size:12px;z-index:2}
+th:nth-child(2),td:nth-child(2){text-align:left;min-width:310px}
+input{width:100%;min-width:72px;padding:6px;border:1px solid #cbd5e1;border-radius:7px;text-align:right;background:white}
+input.name{text-align:left;min-width:290px}
+.good{color:var(--good);font-weight:700}
+.bad{color:var(--bad);font-weight:700}
+.grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-top:16px}
+canvas{width:100%;height:390px;border:1px solid var(--line);border-radius:10px;background:#fff}
+small{color:var(--muted)}
+.rank-list{margin:0;padding-left:22px}
+.rank-list li{margin:6px 0}
+.scenarioBox{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.criteria-note{font-size:12px;color:var(--muted);margin-top:8px}
+footer{font-size:12px;color:var(--muted);margin-top:18px}
+@media(max-width:950px){.cards{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+@media(max-width:520px){.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<div class="wrap">
+<h1>Калькулятор економічної ефективності заходів біологічної безпеки</h1>
+<p>Інтерактивна модель для територій, постраждалих від підтоплення</p>
+</div>
+</header>
+
+<main class="wrap">
+<div class="cards">
+<div class="card"><div class="label">Загальні витрати</div><div class="value" id="totalCost">—</div></div>
+<div class="card"><div class="label">Очікуваний попереджений збиток</div><div class="value" id="totalAvoided">—</div></div>
+<div class="card"><div class="label">Сукупний економічний ефект</div><div class="value" id="totalEffect">—</div></div>
+<div class="card"><div class="label">Позитивних заходів</div><div class="value" id="positiveCount">—</div></div>
+</div>
+
+<div class="formula">
+<b>Формули:</b>
+Lᵢ = L<sub>ms</sub> + L<sub>ec</sub> + L<sub>se</sub> + L<sub>vet</sub> + L<sub>inf</sub>;
+ALᵢ = Pᵢ × Lᵢ × Eᵢ;
+Efᵢ = ALᵢ − Cᵢ;
+EEᵢ = Efᵢ / Cᵢ;
+Eᵢ = (b₁+b₂+b₃+b₄)/20.
+</div>
+
+<div class="card scenarioBox">
+<div>
+  <div class="label">Сценарій ризику</div>
+  <select id="scenario">
+    <option value="low">Низький ризик</option>
+    <option value="base" selected>Базовий</option>
+    <option value="high">Високий ризик</option>
+  </select>
+</div>
+<button class="secondary" onclick="applyScenario()">Застосувати сценарій</button>
+<small>Сценарій змінює Pᵢ відносно базових значень: низький ×0,75; базовий ×1,00; високий ×1,20 (макс. 1,00).</small>
+</div>
+
+<div class="toolbar">
+<button class="primary" onclick="recalculate()">Перерахувати</button>
+<button class="secondary" onclick="saveScenario()">Зберегти сценарій</button>
+<button class="secondary" onclick="loadScenario()">Завантажити сценарій</button>
+<button class="secondary" onclick="downloadCSV()">Експорт CSV</button>
+<button class="danger" onclick="resetData()">Повернути базові дані</button>
+</div>
+
+<div class="tablewrap">
+<table id="calcTable">
+<thead>
+<tr>
+<th>№</th><th>Захід</th><th>Cᵢ, грн</th><th>Pᵢ</th>
+<th>Мед.-соц.</th><th>Екон.</th><th>Сан.-екол.</th><th>Вет.</th><th>Інфрастр.</th><th>Lᵢ</th>
+<th>Зниження ризику<br>b₁</th><th>Швидкість<br>b₂</th><th>Охоплення<br>b₃</th><th>Стійкість<br>b₄</th>
+<th>Eᵢ</th><th>ALᵢ</th><th>Efᵢ</th><th>EEᵢ</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="criteria-note">
+Критерії b₁–b₄ оцінюються від 1 до 5 балів. Eᵢ розраховується автоматично як сума балів / 20.
+</div>
+
+<div class="grid2">
+<div class="card">
+<div class="label">Графік економічної ефективності EEᵢ</div>
+<canvas id="chart" width="900" height="390"></canvas>
+</div>
+<div class="card">
+<div class="label">Рейтинг заходів за EEᵢ</div>
+<ol class="rank-list" id="ranking"></ol>
+<div id="interpretation" style="margin-top:12px;line-height:1.55"></div>
+</div>
+</div>
+
+<footer>
+Базові числові значення є сценарними. Для наукового використання їх можна замінювати статистичними, експертними або нормативними даними.
+</footer>
+</main>
+
+<script>
+const baseData = [
+{name:"Організація безпечного водопостачання",C:10000,P:.8,ms:25000,ec:45000,se:30000,vet:0,inf:50000,b1:5,b2:5,b3:4,b4:4},
+{name:"Дезінфекція затоплених колодязів",C:3000,P:.8,ms:20000,ec:30000,se:25000,vet:10000,inf:20000,b1:5,b2:4,b3:4,b4:4},
+{name:"Масове очищення та знезараження джерел води",C:35000,P:.8,ms:35000,ec:45000,se:50000,vet:15000,inf:40000,b1:5,b2:4,b3:5,b4:4},
+{name:"Контроль якості води",C:25000,P:.7,ms:25000,ec:20000,se:30000,vet:5000,inf:15000,b1:4,b2:4,b3:4,b4:4},
+{name:"Відкачування застійних вод",C:3250,P:.6,ms:15000,ec:25000,se:40000,vet:5000,inf:35000,b1:4,b2:5,b3:3,b4:3},
+{name:"Додаткове дренування / осушення території",C:1650,P:.6,ms:10000,ec:30000,se:35000,vet:5000,inf:50000,b1:4,b2:3,b3:4,b4:3},
+{name:"Дезінфекція ґрунту",C:60000,P:.5,ms:20000,ec:25000,se:70000,vet:15000,inf:20000,b1:4,b2:4,b3:4,b4:3},
+{name:"Утилізація загиблих тварин і органічних відходів",C:7100,P:.5,ms:25000,ec:20000,se:50000,vet:60000,inf:10000,b1:5,b2:4,b3:4,b4:4},
+{name:"Дератизація",C:82500,P:.6,ms:20000,ec:25000,se:35000,vet:30000,inf:20000,b1:4,b2:4,b3:4,b4:4},
+{name:"Дезінсекція",C:15000,P:.5,ms:20000,ec:15000,se:30000,vet:20000,inf:5000,b1:4,b2:4,b3:4,b4:3}
+];
+let data = JSON.parse(JSON.stringify(baseData));
+const fmt = new Intl.NumberFormat('uk-UA',{maximumFractionDigits:2});
+const n=v=>{let x=Number(v);return Number.isFinite(x)?x:0};
+
+function compute(r){
+  const L=r.ms+r.ec+r.se+r.vet+r.inf;
+  const E=(r.b1+r.b2+r.b3+r.b4)/20;
+  const AL=r.P*L*E;
+  const EF=AL-r.C;
+  const EE=r.C?EF/r.C:0;
+  return {L,E,AL,EF,EE};
+}
+
+function render(){
+ const tbody=document.querySelector("#calcTable tbody");
+ tbody.innerHTML="";
+ data.forEach((r,i)=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`
+  <td>${i+1}</td>
+  <td><input class="name" data-i="${i}" data-k="name" value="${r.name}"></td>
+  <td><input type="number" step="1" data-i="${i}" data-k="C" value="${r.C}"></td>
+  <td><input type="number" min="0" max="1" step=".01" data-i="${i}" data-k="P" value="${r.P}"></td>
+  <td><input type="number" step="1" data-i="${i}" data-k="ms" value="${r.ms}"></td>
+  <td><input type="number" step="1" data-i="${i}" data-k="ec" value="${r.ec}"></td>
+  <td><input type="number" step="1" data-i="${i}" data-k="se" value="${r.se}"></td>
+  <td><input type="number" step="1" data-i="${i}" data-k="vet" value="${r.vet}"></td>
+  <td><input type="number" step="1" data-i="${i}" data-k="inf" value="${r.inf}"></td>
+  <td class="L"></td>
+  <td><input type="number" min="1" max="5" step="1" data-i="${i}" data-k="b1" value="${r.b1}"></td>
+  <td><input type="number" min="1" max="5" step="1" data-i="${i}" data-k="b2" value="${r.b2}"></td>
+  <td><input type="number" min="1" max="5" step="1" data-i="${i}" data-k="b3" value="${r.b3}"></td>
+  <td><input type="number" min="1" max="5" step="1" data-i="${i}" data-k="b4" value="${r.b4}"></td>
+  <td class="E"></td><td class="AL"></td><td class="EF"></td><td class="EE"></td>`;
+  tbody.appendChild(tr);
+ });
+ document.querySelectorAll("input").forEach(inp=>{
+  inp.addEventListener("input",e=>{
+   const i=+e.target.dataset.i,k=e.target.dataset.k;
+   data[i][k]=k==="name"?e.target.value:n(e.target.value);
+   recalculate(false);
+  });
+ });
+ recalculate(false);
+}
+
+function recalculate(readInputs=true){
+ if(readInputs){
+  document.querySelectorAll("input").forEach(inp=>{
+   const i=+inp.dataset.i,k=inp.dataset.k;
+   data[i][k]=k==="name"?inp.value:n(inp.value);
+  });
+ }
+ let tc=0,ta=0,te=0,pc=0;
+ const ranked=[];
+ const rows=[...document.querySelectorAll("#calcTable tbody tr")];
+ data.forEach((r,i)=>{
+  const c=compute(r);
+  tc+=r.C; ta+=c.AL; te+=c.EF; if(c.EF>0)pc++;
+  ranked.push({name:r.name,EE:c.EE});
+  rows[i].querySelector(".L").textContent=fmt.format(c.L);
+  rows[i].querySelector(".E").textContent=fmt.format(c.E);
+  rows[i].querySelector(".AL").textContent=fmt.format(c.AL);
+  rows[i].querySelector(".EF").textContent=fmt.format(c.EF);
+  rows[i].querySelector(".EF").className="EF "+(c.EF>=0?"good":"bad");
+  rows[i].querySelector(".EE").textContent=fmt.format(c.EE);
+  rows[i].querySelector(".EE").className="EE "+(c.EE>=0?"good":"bad");
+ });
+ document.getElementById("totalCost").textContent=fmt.format(tc)+" грн";
+ document.getElementById("totalAvoided").textContent=fmt.format(ta)+" грн";
+ document.getElementById("totalEffect").textContent=fmt.format(te)+" грн";
+ document.getElementById("positiveCount").textContent=pc+" / "+data.length;
+
+ ranked.sort((a,b)=>b.EE-a.EE);
+ document.getElementById("ranking").innerHTML=ranked.map(x=>`<li>${x.name}: <b>${fmt.format(x.EE)}</b></li>`).join("");
+ const neg=ranked.filter(x=>x.EE<0);
+ document.getElementById("interpretation").innerHTML=
+   `<b>Сукупний ефект:</b> ${fmt.format(te)} грн.<br>`+
+   `<b>Позитивний ефект:</b> ${pc} із ${data.length} заходів.<br>`+
+   (neg.length?`<b>Від'ємний EE:</b> ${neg.map(x=>x.name).join(", ")}.`:"Усі заходи мають невід'ємний EE.");
+ drawChart();
+}
+
+function drawChart(){
+ const canvas=document.getElementById("chart"),ctx=canvas.getContext("2d");
+ const W=canvas.width,H=canvas.height;
+ ctx.clearRect(0,0,W,H);
+ const vals=data.map(r=>compute(r).EE);
+ const max=Math.max(...vals,0),min=Math.min(...vals,0);
+ const left=220,right=25,top=20,bottom=30;
+ const plotW=W-left-right, rowH=(H-top-bottom)/data.length;
+ const span=(max-min)||1;
+ const zeroX=left+(0-min)/span*plotW;
+
+ ctx.strokeStyle="#cbd5e1";ctx.lineWidth=1;
+ ctx.beginPath();ctx.moveTo(zeroX,top);ctx.lineTo(zeroX,H-bottom);ctx.stroke();
+
+ ctx.font="12px Arial";
+ data.forEach((r,i)=>{
+  const v=vals[i],y=top+i*rowH+rowH*.18,h=rowH*.64;
+  const x=left+(Math.min(0,v)-min)/span*plotW;
+  const x2=left+(Math.max(0,v)-min)/span*plotW;
+  ctx.fillStyle=v>=0?"#166534":"#b91c1c";
+  ctx.fillRect(x,y,Math.max(2,x2-x),h);
+  ctx.fillStyle="#1f2937";
+  const label=(i+1)+". "+(r.name.length>28?r.name.slice(0,28)+"…":r.name);
+  ctx.textAlign="right";ctx.fillText(label,left-8,y+h*.72);
+  ctx.textAlign=v>=0?"left":"right";
+  ctx.fillText(fmt.format(v),v>=0?x2+5:x-5,y+h*.72);
+ });
+}
+
+function applyScenario(){
+ const s=document.getElementById("scenario").value;
+ const factor=s==="low"?.75:s==="high"?1.20:1;
+ data.forEach((r,i)=>r.P=Math.min(1, +(baseData[i].P*factor).toFixed(2)));
+ render();
+}
+function saveScenario(){localStorage.setItem("biosecurityFull",JSON.stringify(data));alert("Сценарій збережено у браузері.");}
+function loadScenario(){const s=localStorage.getItem("biosecurityFull");if(!s){alert("Збереженого сценарію немає.");return;}data=JSON.parse(s);render();}
+function resetData(){data=JSON.parse(JSON.stringify(baseData));document.getElementById("scenario").value="base";render();}
+function downloadCSV(){
+ const head=["№","Захід","C","P","Мед-соц","Екон","Сан-екол","Вет","Інфрастр","L","b1","b2","b3","b4","E","AL","Ef","EE"];
+ const rows=[head];
+ data.forEach((r,i)=>{const c=compute(r);rows.push([i+1,r.name,r.C,r.P,r.ms,r.ec,r.se,r.vet,r.inf,c.L,r.b1,r.b2,r.b3,r.b4,c.E,c.AL,c.EF,c.EE]);});
+ const text="\uFEFF"+rows.map(row=>row.map(v=>`"${String(v).replaceAll('"','""')}"`).join(";")).join("\n");
+ const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="biosecurity_results.csv";a.click();URL.revokeObjectURL(a.href);
+}
+render();
+</script>
+</body>
+</html>
